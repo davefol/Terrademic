@@ -130,6 +130,7 @@ function pandemicGame(){
 			context.fill();
 
 			context.font = "11px Arial";
+			context.miterLimit = 2;
 			context.strokeStyle = "black";
 			context.lineWidth = 4;
 			context.strokeText(city.name, city.xPos - 5, city.yPos - 13 )

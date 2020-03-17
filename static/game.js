@@ -1,100 +1,10 @@
-let cities = [
-	{
-		name: "San Francisco",
-		xPos: 109,
-		yPos: 234,
-		color: "blue",
-		neighbors: ["Tokyo", "Manila", "Los Angeles", "Chicago"]
-	},
-	{
-		name: "Chicago",
-		xPos: 193.5,
-		yPos: 191,
-		color: "blue",
-		neighbors: ["San Francisco", "Mexico City", "Atlanta", "Montréal"]
-	},
-	{
-		name: "Montréal",
-		xPos: 253.5,
-		yPos: 201,
-		color: "blue",
-		neighbors: ["Chicago", "Washington", "New York"]
-	},
-	{
-		name: "New York",
-		xPos: 302.5,
-		yPos: 218,
-		color: "blue",
-		neighbors: ["Montréal", "Washington", "London", "Madrid"]
-	},
-	{
-		name: "Atlanta",
-		xPos: 188.5,
-		yPos: 251,
-		color: "blue",
-		neighbors: ["Chicago", "Washington", "Miami", ]
-	},
-	{
-		name: "Washington",
-		xPos: 290.5,
-		yPos: 260,
-		color: "blue",
-		neighbors: ["New York", "Montréal", "Atlanta", "Miami"]
-	},
-	{
-		name: "London",
-		xPos: 442.5,
-		yPos: 181,
-		color: "blue",
-		neighbors: ["Essen", "Paris", "Madrid", "New York"]
-	},
-	{
-		name: "Essen",
-		xPos: 525.5,
-		yPos: 175,
-		color: "blue",
-		neighbors: ["London", "Paris", "Milan", "St, Petersburg"]
-	},
-  {
-		name: "Miami",
-		xPos: 251.5,
-		yPos: 291,
-		color: "yellow",
-		neighbors: ["Washington", "Atlanta", "Mexico City", "Bogata"]
-	},
-	{
-		name: "St, Petersburg",
-		xPos: 652.5,
-		yPos: 156,
-		color: "blue",
-		neighbors: ["Essen", "Istanbul", "Moscow"]
-	},
-	{
-		name: "Los Angeles",
-		xPos: 97.5,
-		yPos: 309,
-		color: "yellow",
-		neighbors: ["Sydney", "Mexico City", "Lima", "San Francisco", "Chicago"]
-	},
-	{
-		name: "Mexico City",
-		xPos: 166.5,
-		yPos: 330,
-		color: "yellow",
-		neighbors: ["Los Angeles", "Miami", "Chicago", "Bogata", "Lima"]
-	},
-	{
-		name: "Bogata",
-		xPos: 229.5,
-		yPos: 405,
-		color: "yellow",
-		neighbors: ["Miami", "Mexico City", "Lima", "Buenos Aires", "São Paulo"]
-	}
-]
-
 var socket = io();
 socket.on('message', function(data) {
   console.log(data);
+});
+
+socket.on('your name is', function(name) {
+	console.log("my name is", name)
 });
 
 
@@ -106,7 +16,8 @@ function eventWindowLoaded() {
 function pandemicGame(){
 	let canvas = document.getElementById('game-canvas');
 	let context = canvas.getContext('2d');
-	
+	let gameData = {};
+
 	// Show position of mouse on click to aid with city creation
 	canvas.addEventListener('click', function(evt) {
 		var mousePos = getMousePos(canvas, evt);
@@ -116,13 +27,29 @@ function pandemicGame(){
 
 	init();
 
-	function init() {
+	socket.on('cities', function(cities) {
+		gameData.cities = cities;
+		console.log(cities);
+		draw();
+	});
+
+	function draw() {
+		context.clearRect(0, 0, canvas.width, canvas.height);
 		drawCityEdges();
 		drawCities();
 	}
 
+	function init() {
+		initPlayer();
+	}
+
+	function initPlayer() {
+		socket.emit('new player');
+
+	}
+
 	function drawCities() {
-		cities.forEach(city=>{
+	gameData.cities.forEach(city=>{
 			context.beginPath();
 			context.arc(city.xPos, city.yPos, 10, 0, 2 * Math.PI);
 			context.stroke();
@@ -140,7 +67,7 @@ function pandemicGame(){
 	}	
 
 	function drawCityEdges() {
-		let edges = cities.map(city=>
+		let edges = gameData.cities.map(city=>
 			city.neighbors.map(neighbor=>
 				[city.name, neighbor]
 			)
@@ -148,8 +75,8 @@ function pandemicGame(){
 
 		edges.forEach(edge=>{
 			try {
-				let city1 = cities.find(city => city.name === edge[0]);
-				let city2 = cities.find(city => city.name === edge[1]);
+				let city1 = gameData.cities.find(city => city.name === edge[0]);
+				let city2 = gameData.cities.find(city => city.name === edge[1]);
 				context.beginPath();
 				context.moveTo(city1.xPos, city1.yPos);
 				context.lineTo(city2.xPos, city2.yPos);

@@ -2,7 +2,7 @@
   "name": "pandemic-homebrew",
   "version": "1.0.0",
   "description": "Pandemic board game but online",
-  "main": "index.js",
+  "main": "server.js",
   "scripts": {
     "test": "test"
   },

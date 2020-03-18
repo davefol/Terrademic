@@ -73,17 +73,17 @@ let cities = [
 		xPos: 525.5,
 		yPos: 175,
 		color: "blue",
-		neighbors: ["London", "Paris", "Milan", "St, Petersburg"]
+		neighbors: ["London", "Paris", "Milan", "St. Petersburg"]
 	},
   {
 		name: "Miami",
 		xPos: 251.5,
 		yPos: 291,
 		color: "yellow",
-		neighbors: ["Washington", "Atlanta", "Mexico City", "Bogata"]
+		neighbors: ["Washington", "Atlanta", "Mexico City", "Bogotá"]
 	},
 	{
-		name: "St, Petersburg",
+		name: "St. Petersburg",
 		xPos: 652.5,
 		yPos: 156,
 		color: "blue",
@@ -101,15 +101,260 @@ let cities = [
 		xPos: 166.5,
 		yPos: 330,
 		color: "yellow",
-		neighbors: ["Los Angeles", "Miami", "Chicago", "Bogata", "Lima"]
+		neighbors: ["Los Angeles", "Miami", "Chicago", "Bogotá", "Lima"]
 	},
 	{
-		name: "Bogata",
+		name: "Bogotá",
 		xPos: 229.5,
 		yPos: 405,
 		color: "yellow",
 		neighbors: ["Miami", "Mexico City", "Lima", "Buenos Aires", "São Paulo"]
-	}
+	},
+	{
+		name: "Paris",
+		xPos: 488,
+		yPos: 213,
+		color: "blue",
+		neighbors: ["Milan", "Essen", "London", "Madrid", "Algiers", "Istanbul"]
+	},
+	{
+		name: "Madrid",
+		xPos: 432,
+		yPos: 239,
+		color: "blue",
+		neighbors: ["London", "Paris", "New York", "Algiers", "São Paulo"]
+	},
+	{
+		name:"Milan",
+		xPos: 545,
+		yPos: 210,
+		color: "blue",
+		neighbors: ["Essen", "Paris", "Istanbul"]
+	},
+	{
+		name:"Moscow",
+		xPos: 611,
+		yPos: 204,
+		color: "blue",
+		neighbors: ["Tehran", "St. Petersburg", "Istanbul"]
+	},
+	{
+		name:"Istanbul",
+		xPos: 569,
+		yPos: 240,
+		color: "black",
+		neighbors: ["Milan", "St. Petersburg", "Moscow", "Baghdad", "Cairo", "Algiers"]
+	},
+	{
+		name: "Tehran",
+		xPos: 660,
+		yPos: 228,
+		color: "black",
+		neighbors: ["Moscow", "Delhi", "Karachi", "Baghdad"]
+	},
+	{
+		name: "Baghdad",
+		xPos: 613,
+		yPos: 266,
+		color: "black", 
+		neighbors: ["Tehran", "Istanbul", "Cairo", "Riyadh"]
+	},
+	{
+		name: "Cairo",
+		xPos: 564,
+		yPos: 291,
+		color: "black",
+		neighbors: ["Algiers", "Istanbul", "Baghdad", "Riyadh", "Khartoum"]
+	},
+	{
+		name: "Algiers",
+		xPos: 487,
+		yPos: 284,
+		color: "black",
+		neighbors: ["Madrid", "Paris", "Istanbul", "Cairo"]
+	},
+	{
+		name:"Karachi",
+		xPos: 688,
+		yPos: 293,
+		color: "black",
+		neighbors: ["Tehran", "Delhi", "Riyadh", "Mumbai"]
+	},
+	{
+		name:"Riyadh",
+		xPos: 626,
+		yPos: 334,
+		color: "black",
+		neighbors: ["Cairo", "Baghdad", "Karachi"]
+	},
+	{
+		name:"Delhi",
+		xPos: 735,
+		yPos: 269,
+		color: "black",
+		neighbors: ["Tehran", "Karachi", "Kolkata", "Chennai", "Mumbai"]
+	},
+	{
+		name:"Kolkata",
+		xPos: 784,
+		yPos: 284,
+		color: "black",
+		neighbors: ["Delhi", "Hong Kong", "Bangkok", "Chennai"]
+	},
+	{
+		name:"Mumbai",
+		xPos: 699,
+		yPos: 351,
+		color:"black",
+		neighbors: ["Chennai", "Karachi", "Delhi"]
+	},
+	{
+		name: "Chennai",
+		xPos: 747,
+		yPos: 368,
+		color: "black",
+		neighbors: ["Mumbai", "Jakarta", "Kolkata", "Delhi"]
+	},
+	{
+		name:"Hong Kong",
+		xPos: 836,
+		yPos: 319,
+		color: "red",
+		neighbors: ["Kolkata", "Shanghai", "Taipei", "Bangkok", "Ho Chi Minh City", "Manila"]
+	},
+	{
+		name:"Shanghai",
+		xPos: 821,
+		yPos: 268,
+		color: "red",
+		neighbors: ["Beijing", "Seoul", "Tokyo", "Taipei", "Hong Kong"]
+	},
+	{
+		name:"Beijing",
+		xPos: 794,
+		yPos: 215,
+		color: "red",
+		neighbors: ["Shanghai", "Seoul"]
+	},
+	{
+		name: "Seoul",
+		xPos: 864,
+		yPos: 220,
+		color: "red",
+		neighbors: ["Beijing", "Tokyo", "Shanghai"]
+	},
+	{
+		name:"Tokyo",
+		xPos: 911,
+		yPos: 240,
+		color:"red",
+		neighbors: ["Seoul", "Shanghai", "Osaka", "San Francisco"]
+	},
+	{
+		name:"Osaka",
+		xPos: 896,
+		yPos: 263,
+		color:"red",
+		neighbors: ["Tokyo", "Taipei"]
+	},
+	{
+		name:"Taipei",
+		xPos: 892,
+		yPos: 305,
+		color: "red",
+		neighbors: ["Shanghai", "Osaka", "Hong Kong", "Manila"]
+	},
+	{
+		name: "Bangkok",
+		xPos: 805,
+		yPos: 340,
+		color: "red",
+		neighbors: ["Kolkata", "Hong Kong", "Ho Chi Minh City", "Jakarta"]
+	},
+	{
+		name: "Jakarta",
+		xPos: 819,
+		yPos: 426,
+		color: "red",
+		neighbors: ["Chennai", "Bangkok", "Ho Chi Minh City", "Sydney"]
+	},
+	{
+		name: "Ho Chi Minh City",
+		xPos: 853,
+		yPos: 382,
+		color: "red",
+		neighbors: ["Hong Kong", "Bangkok", "Jakarta", "Manila"]
+	},
+	{
+		name: "Manila",
+		xPos: 936,
+		yPos: 384,
+		color: "red",
+		neighbors: ["Sydney", "San Francisco", "Hong Kong", "Taipei", "Ho Chi Minh City"]
+	},
+	{
+		name: "Sydney",
+		xPos: 940,
+		yPos: 518,
+		color: "red",
+		neighbors: ["Los Angeles", "Manila", "Jakarta"]
+	},
+	{
+		name:"Khartoum",
+		xPos: 587,
+		yPos: 362,
+		color: "yellow",
+		neighbors: ["Cairo", "Lagos", "Kinshasa", "Johannesburg"]
+	},
+	{
+		name:"Lagos",
+		xPos: 475,
+		yPos: 369,
+		color: "yellow",
+		neighbors: ["Khartoum", "São Paulo", "Kinshasa"]
+	},
+	{
+		name:"Kinshasa",
+		xPos: 526,
+		yPos: 421,
+		color: "yellow",
+		neighbors: ["Lagos", "Khartoum", "Johannesburg"]
+	},
+	{
+		name:"Johannesburg",
+		xPos: 563,
+		yPos: 505,
+		color: "yellow",
+		neighbors: ["Khartoum", "Kinshasa", "Buenos Aires"]
+	},
+	{
+		name:"São Paulo",
+		xPos: 342,
+		yPos: 473,
+		color: "yellow",
+		neighbors: ["Madrid", "Lagos", "Bogotá", "Buenos Aires"]
+	},
+	{
+		name:"Buenos Aires",
+		xPos: 307,
+		yPos: 517,
+		color:"yellow",
+		neighbors: ["São Paulo", "Bogotá", "Santiago", "Johannesburg"]
+	},
+	{
+		name: "Santiago",
+		xPos: 226,
+		yPos: 555,
+		color:"yellow",
+		neighbors: ["Buenos Aires", "Lima"]
+	},
+	{
+		name:"Lima",
+		xPos: 206,
+		yPos: 468,
+		color:"yellow",
+		neighbors: ["Los Angeles", "Mexico City", "Bogotá", "Santiago"]
+	}	
 ]
 
 

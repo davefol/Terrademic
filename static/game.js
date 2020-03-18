@@ -94,13 +94,13 @@ function pandemicGame(){
 				context.fillStyle = city.color;
 				context.fill(gameData.uiElements[cityKey]);
 
-				context.font = "11px Arial";
+				context.font = "10px Arial";
 				context.miterLimit = 2;
 				context.strokeStyle = "black";
 				context.lineWidth = 4;
-				context.strokeText(city.name, city.xPos - 5, city.yPos - 13 )
+				context.strokeText(city.name, city.xPos - 20, city.yPos - 13 )
 				context.fillStyle = "white"
-				context.fillText(city.name, city.xPos - 5, city.yPos - 13 )
+				context.fillText(city.name, city.xPos - 20, city.yPos - 13 )
 				});
 		}
 
@@ -160,7 +160,6 @@ function pandemicGame(){
 		socket.emit('new player');
 
 	}
-
 
 	function getMousePos(cavas, evt) {
 		var rect = canvas.getBoundingClientRect();

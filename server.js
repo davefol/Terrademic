@@ -139,10 +139,10 @@ io.on('connection', function(socket) {
 	socket.on('new player', function() {
 		players[socket.id] = {
 			name: getName(Object.entries(players).map(player=>player[1].name)),
-			cards: [], 
+			cards: [],
 			location: undefined,
 			ready_to_start: false,
-			player_order: ++numPlayers 
+			player_order: ++numPlayers
 		}
 		io.to(socket.id).emit('your name is', players[socket.id].name)
 		io.to(socket.id).emit('cities', cities);

@@ -28,13 +28,21 @@ function pandemicGame(){
 	canvas.addEventListener('click', function(evt) {
 		let mousePos = getMousePos(canvas, evt);
 		for (let [name, path] of Object.entries(gameData.uiElements)) {
-			if context.isPointInPath(path, mousePos.x, mousePos.y) {
-				console.log(name);
+			if (context.isPointInPath(path, mousePos.x, mousePos.y)) {
+                handleClick(name);
 			}
 		}
-	}
+    });
 
-	
+    function handleClick(uiElementKey) {
+        console.log(uiElementKey);
+        if (uiElementKey.startsWith("CITY: ")) {
+
+
+        } else if (uiElementKey.startswith("PLAYER_TEXT:")) {
+
+        }
+    }
 
 	init();
 
@@ -48,7 +56,7 @@ function pandemicGame(){
 		draw();
 	});
 
-	
+
 
 	function draw() {
 		context.clearRect(0, 0, canvas.width, canvas.height);
@@ -94,7 +102,7 @@ function pandemicGame(){
 				context.fillStyle = "white"
 				context.fillText(city.name, city.xPos - 5, city.yPos - 13 )
 				});
-		}	
+		}
 
 		function drawUI() {
 			let playerInfo = {
@@ -119,18 +127,27 @@ function pandemicGame(){
 			let lineHeight = 12;
 			Object.entries(gameData.players).forEach(playerArr=>{
 				let player = playerArr[1]
-				gameData.uiElements[`PLAYER_TEXT: ${player.name}`] = new Path2D();
+                let playerTextKey = `PLAYER_TEXT: ${player.name}`
+				gameData.uiElements[playerTextKey] = new Path2D();
 
 				context.font = `${playerInfo.lineHeight}px ${playerInfo.fontFace}`
 				context.fillStyle = "black";
 				context.fillText(
-					player.name, 
-					playerInfo.x + playerInfo.padLeft, 
+					player.name,
+					playerInfo.x + playerInfo.padLeft,
 					playerInfo.y + currentLine * playerInfo.lineHeight + playerInfo.padTop
 				)
-				gameData.uiElements[player.name].rect(playerInfo.x + playerInfo.padLeft, playerInfo.y + currentLine * playerInfo.lineHeight + playerInfo.padTop, playerInfo.padLeft, context.measureText(player.name).width, playerInfo.lineHeight) 
+				gameData.uiElements[playerTextKey].rect(
+                    playerInfo.x + playerInfo.padLeft,
+                    playerInfo.y + (currentLine * playerInfo.lineHeight),
+                    context.measureText(player.name).width,
+                    playerInfo.lineHeight
+                )
+
 				currentLine += 1;
 			})
+
+
 		}
 
 	}

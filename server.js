@@ -22,6 +22,14 @@ io.on('connection', function(socket) {
 
 let players = {};
 let numPlayers = 0;
+let maxPlayers = 4;
+
+let maxResearchStations = 6;
+let numResearchStations = 0;
+
+
+
+
 let cities = [
 	{
 		name: "San Francisco",
@@ -361,6 +369,35 @@ let cities = [
 	}	
 ]
 
+// Set disease counts and research station for each city
+cities.forEach(city => {
+	city.diseaseCounts = {
+		blue: 0,
+		yellow: 0,
+		red: 0,
+		black: 0
+	};
+	city.researchStationState = "not built";
+})
+
+placeResearchStation("Atlanta");
+
+
+function placeResearchStation (cityName) {
+	cityIndex = cities.findIndex(city => city.name === cityName);
+	if (numResearchStations > maxResearchStations) {
+		return {result: "failure", reason: "Research Station limit reached"}
+	}
+
+	if (cities[cityIndex].researchStationState === "built") {
+		return {result: "failure", reason: "Research station already built"}
+	}
+
+	cities[cityIndex].researchStationState = "built";
+	numResearchStations++;
+	return {result: "success", reason: ""}
+}
+
 
 function getName(pickedNames) {
 	let adjectives = ["tested", "obsequious", "technical", "steady", "courageous", "quixotic", "sneaky", "gifted"];
@@ -378,21 +415,93 @@ function getName(pickedNames) {
 	return newName;
 }
 
+let pickedRoles = [];
+function getRole() {
+	let roles = [
+		{
+			name: "Medic",
+			description: "Remove all cubes of a single color when you treat a city.\n-Administer known cures for free."
+		},
+		{
+			name: "Researcher",
+			description: "You may give a player cards from your hand for 1 action per card.\nBoth of your pawns must be in the same city, but it doesn't matter which city you are in."
+		},
+		{
+			name: "Scientist",
+			description: "You only need 4 cards of the same color to discover a cure."
+		},
+		{
+			name: "Dispatcher",
+			description: "Move your fellow players' pawns on your turn as if they were your own.\nMove any pawn to another city containing a pawn for 1 action."
+		},
+		{
+			name: "Operations Expert",
+			description: "You may build a Research Station in your current city for one action.\nCan move from a station to any city by discarding a card."
+		},
+		{
+			name: "Quarantine Specialist",
+			description: "Prevents placement of cubes, and outbreaks in her city and neighboring ones."
+		},
+		{
+			name: "Contingency Planner",
+			description: "Can take and re-use (once) discarded events."
+		}
+	]
+	let uniqueRole = false;
+	let newRole = undefined
+	while (!uniqueRole) {
+		newRole = roles[Math.floor(Math.random() * roles.length)];
+		console.log(pickedRoles);
+		if (typeof pickedRoles.find(role => role.name == newRole.name) == 'undefined') {
+			uniqueRole = true;
+		}
+	}
+	pickedRoles.push(newRole);
+	return newRole;
+}
+
+let pickedPawns = []
+function getPawn() {
+	let pawnColors = ["WhiteSmoke","SkyBlue","Orange","SpringGreen","SeaGreen", "Brown", "Pink"]
+	let newPawn = undefined;
+	let uniquePawn = false;
+	while(!uniquePawn) {
+		newPawn = pawnColors[Math.floor(Math.random() * pawnColors.length)];
+		if (typeof pickedPawns.find(pawn => pawn === newPawn) == 'undefined') {
+			uniquePawn = true;
+		}
+	}
+	pickedPawns.push(newPawn);
+	return newPawn;
+}
+
+function addNewPlayer(socket) {
+	if (numPlayers >= maxPlayers) {
+		io.to(socket.id).emit('you are a spectator');
+		io.to(socket.id).emit('cities', cities);
+		return;
+	}
+
+	players[socket.id] = {
+		name: getName(Object.entries(players).map(player=>player[1].name)),
+		cards: [],
+		location: "Atlanta",
+		readyToStart: false,
+		player_order: ++numPlayers,
+		role: getRole(),
+		pawn: getPawn()
+	}
+
+
+	io.to(socket.id).emit('your name is', players[socket.id].name)
+	io.to(socket.id).emit('cities', cities);
+}
+
 
 
 io.on('connection', function(socket) {
-	socket.on('new player', function() {
-		players[socket.id] = {
-			name: getName(Object.entries(players).map(player=>player[1].name)),
-			cards: [],
-			location: undefined,
-			ready_to_start: false,
-			player_order: ++numPlayers
-		}
-		io.to(socket.id).emit('your name is', players[socket.id].name)
-		io.to(socket.id).emit('cities', cities);
-	});
-
+	socket.on('new player', () => addNewPlayer(socket));
+	
 	socket.on('player ready', function() {
 		players[socket.id].ready_to_start = true;
 	});

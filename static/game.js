@@ -3,10 +3,6 @@ socket.on('message', function(data) {
   console.log(data);
 });
 
-socket.on('your name is', function(name) {
-	console.log("my name is", name)
-});
-
 
 
 window.addEventListener("load", eventWindowLoaded, false);
@@ -16,7 +12,25 @@ function eventWindowLoaded() {
 function pandemicGame(){
 	let canvas = document.getElementById('game-canvas');
 	let context = canvas.getContext('2d');
-	let gameData = {cities: [], players: [], uiElements: {}};
+	let gameData = {my_player: '', cities: [], players: {}, uiElements: {}, selectedUiElement: ''};
+	
+	socket.on("your name is", function(name) {
+		gameData.my_player = name;
+		gameData.selectedUiElement = `PLAYER_TEXT: ${gameData.my_player}`
+		console.log(gameData);
+	});
+
+	function getMyPlayerKey() {
+		return Object.keys(gameData.players).find(playerKey => gameData.players[playerKey].name === gameData.my_player);
+	}
+
+	function getMyPlayer() {
+		return gameData.players[getMyPlayerKey()];
+	}
+
+	socket.on("you are a spectator", function() {
+		gameData.my_player = "Spectator";
+	});
 
 	// Show position of mouse on click to aid with city creation
 	canvas.addEventListener('click', function(evt) {
@@ -37,11 +51,15 @@ function pandemicGame(){
     function handleClick(uiElementKey) {
         console.log(uiElementKey);
         if (uiElementKey.startsWith("CITY: ")) {
+					gameData.selectedUiElement = uiElementKey;
+					draw();
 
-
-        } else if (uiElementKey.startswith("PLAYER_TEXT:")) {
-
-        }
+        } else if (uiElementKey.startsWith("PLAYER_TEXT:")) {
+					gameData.selectedUiElement = uiElementKey;
+					draw();
+        } else if (uiElementKey.startsWith("READY_BUTTON")) {
+					socket.emit("player ready");	
+				}
     }
 
 	init();
@@ -78,7 +96,9 @@ function pandemicGame(){
 					context.beginPath();
 					context.moveTo(city1.xPos, city1.yPos);
 					context.lineTo(city2.xPos, city2.yPos);
+					context.globalAlpha = 0.2;
 					context.stroke();
+					context.globalAlpha = 1;
 				}
 				catch(err) {
 				}
@@ -90,13 +110,17 @@ function pandemicGame(){
 				let cityKey = `CITY: ${city.name}`
 				gameData.uiElements[cityKey] = new Path2D();
 				gameData.uiElements[cityKey].arc(city.xPos, city.yPos, 10, 0, 2 * Math.PI);
+				if (gameData.selectedUiElement === cityKey) {
+					context.strokeStyle = "green";
+				} else {
+					context.strokeStyle = "black";
+				}
 				context.stroke(gameData.uiElements[cityKey]);
 				context.fillStyle = city.color;
 				context.fill(gameData.uiElements[cityKey]);
 
 				context.font = "10px Arial";
 				context.miterLimit = 2;
-				context.strokeStyle = "black";
 				context.lineWidth = 4;
 				context.strokeText(city.name, city.xPos - 20, city.yPos - 13 )
 				context.fillStyle = "white"
@@ -105,49 +129,130 @@ function pandemicGame(){
 		}
 
 		function drawUI() {
-			let playerInfo = {
-				x: 3,
-				y: 440,
-				width: 200,
-				height: 200,
-				lineHeight: 14,
-				fontFace: "arial",
-				padLeft: 10,
-				padTop: 10
+			try {
+				drawReadyButton();
+			}
+			catch(error) {
+			}
+			
+			drawPlayers();
+			drawInfoPane();
+
+			function drawReadyButton() {
+				if (getMyPlayer().readyToStart === false) {
+					let readyButton = new Path2D();
+					let x = 583;
+					let y = 565;
+
+					readyButton.rect(x, y, 100, 40);
+					context.fillStyle = "red";
+					context.fill(readyButton);
+					gameData.uiElements['READY_BUTTON'] = readyButton;
+
+					context.fillStyle = "black";
+					context.fillText("Click to ready up.",x, y)
+				}
 			}
 
-			context.fillStyle = 'white';
-			context.strokeStyle = "black";
-			context.fillRect(playerInfo.x, playerInfo.y, playerInfo.width, playerInfo.height);
-			context.beginPath();
-			context.rect(playerInfo.x, playerInfo.y, playerInfo.width, playerInfo.height);
-			context.stroke();
+			function drawPlayers() {
+				let playerInfo = { 
+					x: 399,
+					y: 655,
+					width: 200,
+					height: 200,
+					lineHeight: 14,
+					fontFace: "arial",
+					padLeft: 10,
+					padTop: 0
+				}
 
-			let currentLine = 1;
-			let lineHeight = 12;
-			Object.entries(gameData.players).forEach(playerArr=>{
-				let player = playerArr[1]
-                let playerTextKey = `PLAYER_TEXT: ${player.name}`
-				gameData.uiElements[playerTextKey] = new Path2D();
+				let currentLine = 1;
+				let lineHeight = 12;
+				Object.entries(gameData.players).forEach(playerArr=>{
+					let player = playerArr[1]
+									let playerTextKey = `PLAYER_TEXT: ${player.name}`
+					gameData.uiElements[playerTextKey] = new Path2D();
 
-				context.font = `${playerInfo.lineHeight}px ${playerInfo.fontFace}`
-				context.fillStyle = "black";
-				context.fillText(
-					player.name,
-					playerInfo.x + playerInfo.padLeft,
-					playerInfo.y + currentLine * playerInfo.lineHeight + playerInfo.padTop
-				)
-				gameData.uiElements[playerTextKey].rect(
-                    playerInfo.x + playerInfo.padLeft,
-                    playerInfo.y + (currentLine * playerInfo.lineHeight),
-                    context.measureText(player.name).width,
-                    playerInfo.lineHeight
-                )
+					context.font = `${playerInfo.lineHeight}px ${playerInfo.fontFace}`
+					context.fillStyle = "black";
+					context.fillText(
+						player.name,
+						playerInfo.x + playerInfo.padLeft,
+						playerInfo.y + currentLine * playerInfo.lineHeight + playerInfo.padTop
+					)
+					gameData.uiElements[playerTextKey].rect(
+											playerInfo.x + playerInfo.padLeft,
+											playerInfo.y + ((currentLine-1) * playerInfo.lineHeight),
+											context.measureText(player.name).width,
+											playerInfo.lineHeight
+									)
+					if (gameData.selectedUiElement === playerTextKey) {
+						context.fillStyle = "green"
+						context.globalAlpha = 0.2;
+						context.fill(gameData.uiElements[playerTextKey])
+						context.globalAlpha = 1;
+					}
 
-				currentLine += 1;
-			})
+					currentLine += 1;
+				})
+			}
 
+			function drawInfoPane() {
+				if (gameData.selectedUiElement.startsWith("CITY:")) {
+					drawCityInfo();
+				} else if (gameData.selectedUiElement.startsWith("PLAYER_TEXT:")) {
+					drawPlayerInfo();
+				}
 
+				function drawCityInfo() {
+					let cityName = gameData.selectedUiElement.split("CITY: ")[1];
+					let city = gameData.cities.find(city=>city.name === cityName);
+
+					drawDiseaseCounts();
+					drawResearchStationStatus();
+					drawCityName();
+
+					function drawDiseaseCounts() {
+						let x = 627;
+						let y = 745;
+						for (let [color, count] of Object.entries(city.diseaseCounts)) {
+							context.font = "16px Arial";
+							context.fillStyle = color;
+							context.miterLimit = 2;
+							context.lineWidth = 2;
+							context.strokeText(count, x, y);
+							context.fillText(count, x, y);
+							x+= 60;
+						}
+					}
+
+					function drawResearchStationStatus() {
+						let x = 623;
+						let y = 700;
+						context.font = "14px Arial";
+						context.fillStyle = "black";
+						context.lineWidth = 1;
+						
+						context.fillText(`Research Station: ${city.researchStationState}`, x, y);
+					}
+
+					function drawCityName() {
+						let x = 622;
+						let y = 671;
+						context.font = "22px Arial";
+						context.fillStyle = city.color;
+						context.miterLimit = 2;
+						context.lineWidth = 3;
+						if (city.color === "yellow") {
+							context.strokeText(city.name, x, y);
+						}
+						context.fillText(city.name, x, y);
+					}
+				}
+
+				function drawPlayerInfo() {
+				}
+			}
 		}
 
 	}

@@ -13,12 +13,31 @@ function pandemicGame(){
 	let canvas = document.getElementById('game-canvas');
 	let context = canvas.getContext('2d');
 	let gameData = {my_player: '', cities: [], players: {}, uiElements: {}, selectedUiElement: ''};
+
+	getPlayerName();
+	function getPlayerName() {
+		let validPlayerName = false;
+		let playerName = "";
+		while (!validPlayerName) {
+			playerName = prompt("Enter your name. If you are a returning player, enter the same name.");
+			if (playerName !== null && playerName !== "") {
+				validPlayerName = true;
+			}
+		}
+		socket.emit("new player", playerName);
+	}
 	
 	socket.on("your name is", function(name) {
 		gameData.my_player = name;
 		gameData.selectedUiElement = `PLAYER_TEXT: ${gameData.my_player}`
 		console.log(gameData);
 	});
+
+	socket.on('info', info => {console.log(info.message)});
+	socket.on('result', result => {console.log(result.reason)});
+	socket.on("turn", turn => gameData.turn = turn);
+	socket.on("outbreaks", outbreaks => gameData.outbreaks = outbreaks);
+	socket.on("diseases", diseases => gameData.diseases = diseases);
 
 	function getMyPlayerKey() {
 		return Object.keys(gameData.players).find(playerKey => gameData.players[playerKey].name === gameData.my_player);
@@ -57,12 +76,17 @@ function pandemicGame(){
         } else if (uiElementKey.startsWith("PLAYER_TEXT:")) {
 					gameData.selectedUiElement = uiElementKey;
 					draw();
-        } else if (uiElementKey.startsWith("READY_BUTTON")) {
+        } else if (uiElementKey =="READY_BUTTON_FALSE") {
 					socket.emit("player ready");	
+				} else if (uiElementKey.startsWith('DRIVE/FERRY')) {
+					socket.emit('action', {
+						type: 'drive/ferry',
+						city: uiElementKey.split(':')[1]
+					})
+				} else if (uiElementKey.startsWith('CHARTER_FLIGHT')) {
+
 				}
     }
-
-	init();
 
 	socket.on('cities', function(cities) {
 		gameData.cities = cities;
@@ -80,6 +104,9 @@ function pandemicGame(){
 		context.clearRect(0, 0, canvas.width, canvas.height);
 		drawCityEdges();
 		drawCities();
+		if (gameData.cities.length > 0) {
+			drawPlayerIcons();
+		}
 		drawUI();
 
 		function drawCityEdges() {
@@ -97,6 +124,7 @@ function pandemicGame(){
 					context.moveTo(city1.xPos, city1.yPos);
 					context.lineTo(city2.xPos, city2.yPos);
 					context.globalAlpha = 0.2;
+					context.lineWidth = 3;
 					context.stroke();
 					context.globalAlpha = 1;
 				}
@@ -128,7 +156,47 @@ function pandemicGame(){
 				});
 		}
 
+		function drawPlayerIcons() {
+			let offsets = [
+				{x: -5, y: -5},
+				{x: +5, y: -5},
+				{x: -5, y: +5},
+				{x: +5, y: +5}
+			]
+			Object.values(gameData.players).forEach(player => {
+				let playerIcon = new Path2D();
+				let playerIconOutline = new Path2D();
+				let city = gameData.cities.find(city=>city.name === player.location);
+				playerIcon.arc(
+					city.xPos + offsets[player.playerOrder].x,
+					city.yPos + offsets[player.playerOrder].y, 
+					4,
+					0, 
+					2 * Math.PI
+				);
+				let tempFillStyle = context.fillStyle;
+				let tempStrokeStyle = context.strokeStyle;
+				let tempLineWidth = context.lineWidth;
+				context.fillStyle = player.pawn;
+				context.strokeStyle = "white";
+				context.lineWidth = 2;
+				context.fill(playerIcon);
+				context.stroke(playerIcon);
+				context.lineWidth = tempLineWidth;
+				context.strokeStyle = tempStrokeStyle;
+				context.fillStyle = tempFillStyle;
+			});
+		}
+
 		function drawUI() {
+			let elementsToDestroy = ['READY_BUTTON_FALSE', 'READY_BUTTON_TRUE', 'DRIVE/FERRY', 'CHARTER_FLIGHT'];
+			for (let key of Object.keys(gameData.uiElements)) {
+				if (elementsToDestroy.some(prefix => key.startsWith(prefix))) {
+					delete gameData.uiElements[key];
+				}
+			}
+
+			// Player not initialized in the beginning (or may be spectator) so this will throw undefined
 			try {
 				drawReadyButton();
 			}
@@ -138,19 +206,27 @@ function pandemicGame(){
 			drawPlayers();
 			drawInfoPane();
 
+			function drawButton(text, x, y, textColor, backgroundColor, fontSize) {
+				context.font = `${fontSize}px Arial`;
+				let textWidth = context.measureText(text).width;
+				let buttonPath = new Path2D();
+				buttonPath.rect(x, y, textWidth + 30, fontSize + 20);
+				context.fillStyle = backgroundColor;
+				context.fill(buttonPath);
+				context.fillStyle = textColor;
+				context.fillText(text, x + 15, y + fontSize + 10);
+				return buttonPath;
+			}
+
 			function drawReadyButton() {
+				let readyButton = new Path2D();
+				let x = 583;
+				let y = 565;
+				readyButton.rect(x, y, 100, 40);
 				if (getMyPlayer().readyToStart === false) {
-					let readyButton = new Path2D();
-					let x = 583;
-					let y = 565;
-
-					readyButton.rect(x, y, 100, 40);
-					context.fillStyle = "red";
-					context.fill(readyButton);
-					gameData.uiElements['READY_BUTTON'] = readyButton;
-
-					context.fillStyle = "black";
-					context.fillText("Click to ready up.",x, y)
+					gameData.uiElements['READY_BUTTON_FALSE'] = drawButton('Click to ready up.', x, y, "black", "red", 22);
+				} else {
+					gameData.uiElements['READY_BUTTON_TRUE'] = drawButton('You are ready.', x, y, "white", "green", 22);
 				}
 			}
 
@@ -211,10 +287,11 @@ function pandemicGame(){
 					drawDiseaseCounts();
 					drawResearchStationStatus();
 					drawCityName();
+					drawActions();
 
 					function drawDiseaseCounts() {
-						let x = 627;
-						let y = 745;
+						let x = 790;
+						let y = 760;
 						for (let [color, count] of Object.entries(city.diseaseCounts)) {
 							context.font = "16px Arial";
 							context.fillStyle = color;
@@ -222,13 +299,13 @@ function pandemicGame(){
 							context.lineWidth = 2;
 							context.strokeText(count, x, y);
 							context.fillText(count, x, y);
-							x+= 60;
+							x+= 40;
 						}
 					}
 
 					function drawResearchStationStatus() {
-						let x = 623;
-						let y = 700;
+						let x = 583;
+						let y = 760;
 						context.font = "14px Arial";
 						context.fillStyle = "black";
 						context.lineWidth = 1;
@@ -237,7 +314,7 @@ function pandemicGame(){
 					}
 
 					function drawCityName() {
-						let x = 622;
+						let x = 588;
 						let y = 671;
 						context.font = "22px Arial";
 						context.fillStyle = city.color;
@@ -248,6 +325,13 @@ function pandemicGame(){
 						}
 						context.fillText(city.name, x, y);
 					}
+
+					function drawActions() {
+						let xPos = 588;
+						let yPos = 690;
+						gameData.uiElements[`DRIVE/FERRY:${city.name}`] = drawButton("Drive/Ferry", xPos, yPos, "black", "beige", 11);
+						gameData.uiElements[`CHARTER_FLIGHT:${city.name}`] = drawButton("Charter flight", xPos + 100, yPos, "black", "beige", 11);
+					}
 				}
 
 				function drawPlayerInfo() {
@@ -257,14 +341,6 @@ function pandemicGame(){
 
 	}
 
-	function init() {
-		initPlayer();
-	}
-
-	function initPlayer() {
-		socket.emit('new player');
-
-	}
 
 	function getMousePos(cavas, evt) {
 		var rect = canvas.getBoundingClientRect();

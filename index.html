@@ -2,17 +2,47 @@
   <head>
     <title>Pandemic Homebrew</title>
     <style>
+			body {
+				background-color: #948559b8;
+			}
       #game-canvas {
         width: 1035px;
         height: 800px;
 				margin :auto;
 				display: block;
-				background-image: url('static/world_map.jpg');
+				background-image: url('static/world_map.png');
       }
+			#messages {
+				position:absolute;
+				z-index: 9;
+				border: 1px solid #d3d3d3;
+				width: 300px;
+				height: 500px;
+				font-family: Arial;
+				font-size: 12px;
+				background-color: white;
+			}
+			
+			#message-list-container {
+				overflow-y: scroll;
+				width: 300px;
+				height: 467px;
+			}
+
+			#messages-header {
+				padding: 10px;
+				cursor: move;
+				z-index: 10;
+				background-color: #2196F3;
+			}
+			#message-list { list-style-type: none; margin: 0; padding: 0; }
+      #message-list li { padding: 5px 10px; }
+      #message-list li:nth-child(odd) { background: #eee; }
     </style>
     <script src="/socket.io/socket.io.js"></script>
   </head>
   <body>
+		<div id="messages"> <div id="messages-header">World News</div> <div id="message-list-container"><ul id="message-list"></ul></div></div>
     <canvas id="game-canvas" width="1035px" height="800px"></canvas>
   </body>
   <script src="/static/game.js"></script>

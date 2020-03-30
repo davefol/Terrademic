@@ -1,6 +1,6 @@
 ---
 author: David Folarin
-version: 1.0
+version: 1.1
 title: Terrademic: clone of Pandemic board game
 ---
 

@@ -4,7 +4,6 @@ socket.on('message', function(data) {
 });
 
 
-
 window.addEventListener("load", eventWindowLoaded, false);
 function eventWindowLoaded() {
 	pandemicGame();
@@ -12,6 +11,25 @@ function eventWindowLoaded() {
 function pandemicGame(){
 	let canvas = document.getElementById('game-canvas');
 	let context = canvas.getContext('2d');
+	function wrapText(text, x, y, maxWidth, lineHeight) {
+		var words = text.split(' ');
+		var line = '';
+
+		for(var n = 0; n < words.length; n++) {
+			var testLine = line + words[n] + ' ';
+			var metrics = context.measureText(testLine);
+			var testWidth = metrics.width;
+			if (testWidth > maxWidth && n > 0) {
+				context.fillText(line, x, y);
+				line = words[n] + ' ';
+				y += lineHeight;
+			}
+			else {
+				line = testLine;
+			}
+		}
+		context.fillText(line, x, y);
+	}
 	let gameData = {
 		my_player: '', 
 		cities: [], 
@@ -36,10 +54,11 @@ function pandemicGame(){
 		isUsingGovernmentGrant: false,
 		governmentGrantTargetCity: false,
 		isChoosingGovernmentGrantFromCity: false,
-		infectionDiscardPile: []
+		infectionDiscardPile: [],
+		isDispatching: false,
+		dispatchTarget: false,
+		playerDiscardPile: []
 	};
-
-
 
 	getPlayerName();
 	function getPlayerName() {
@@ -63,7 +82,6 @@ function pandemicGame(){
 	let messageList = document.getElementById("message-list");
 	let messageListContainer = document.getElementById("message-list-container");
 	socket.on('info', info => {
-		console.log(info.message)
 		let newMessage = document.createElement('li');
 		newMessage.appendChild(document.createTextNode(`${info.from}: ${info.message}`));
 		messageList.appendChild(newMessage);
@@ -72,9 +90,11 @@ function pandemicGame(){
 	socket.on('result', result => {console.log(result.reason)});
 	socket.on("turn", turn => gameData.turn = turn);
 	socket.on("outbreaks", outbreaks => gameData.outbreaks = outbreaks);
-	socket.on("diseases", diseases => gameData.diseases = diseases);
+	socket.on("diseases", diseases => {gameData.diseases = diseases; draw()});
 	socket.on('game started', () => {gameData.gameStarted = true;});
 	socket.on('airlift succesful', () => {gameData.isAirliftingPlayer = false; gameData.airliftTarget = false;});
+
+	socket.on('player discard pile', playerDiscardPile=>gameData.playerDiscardPile=playerDiscardPile);
 
 	socket.on('force discard card', () => {
 		gameData.isDiscardingCard = true;	
@@ -91,6 +111,8 @@ function pandemicGame(){
 	socket.on('infection rate', infectionRate => gameData.infectionRate = infectionRate);
 	socket.on('infection discard pile', infectionDiscardPile=>gameData.infectionDiscardPile = infectionDiscardPile);
 
+	socket.on('game over', data => gameOver(data));
+
 
 	function getMyPlayerKey() {
 		return Object.keys(gameData.players).find(playerKey => gameData.players[playerKey].name === gameData.my_player);
@@ -104,13 +126,6 @@ function pandemicGame(){
 		gameData.my_player = "Spectator";
 	});
 
-	// Show position of mouse on click to aid with city creation
-	canvas.addEventListener('click', function(evt) {
-		var mousePos = getMousePos(canvas, evt);
-		var message = '{\n\t\tname:,\n\t\txPos: '+mousePos.x+',\n\t\tyPos: '+mousePos.y+',\n\t\tcolor:'+'\n\t}'
-		console.log(message)
-	}, false);
-
 	canvas.addEventListener('click', function(evt) {
 		let mousePos = getMousePos(canvas, evt);
 		for (let [name, path] of Object.entries(gameData.uiElements)) {
@@ -121,7 +136,6 @@ function pandemicGame(){
     });
 
 	function handleClick(uiElementKey) {
-			console.log(uiElementKey);
 			if (uiElementKey.startsWith("CITY:")) {
 				console.log(gameData.selectedUiElement, uiElementKey);
 				if (gameData.isPaused){
@@ -164,6 +178,8 @@ function pandemicGame(){
 								target: gameDAta.governmentGrantTarget
 							});
 							gameData.isChoosingGovernmentGrantFromCity = false;
+						} else if (gameData.isDispatching && gameData.dispatchTarget) {
+							dispatchLogic(gameData.dispatchTarget, uiElementKey.split(':')[1]);	
 						} else {
 							let playerLocationHasResearchStation = gameData.cities
 								.find(city => city.name === Object.values(gameData.players)
@@ -172,11 +188,16 @@ function pandemicGame(){
 							let playerDestinationHasResearchStation = gameData.cities
 								.find(city => city.name === uiElementKey.split(':')[1])
 								.researchStationState === 'built';
+							let playerIsOperationsExpert = Object.values(gameData.players)
+								.find(player=>player.name===gameData.my_player)
+								.role.name === "Operations Expert";
 							if (playerLocationHasResearchStation && playerDestinationHasResearchStation) {
 								socket.emit('action', {
 									type: 'shuttle flight',
 									city: uiElementKey.split(':')[1]
 								});
+							} else if (playerLocationHasResearchStation && playerIsOperationsExpert) {
+								operationsExpertShuttleWindow(uiElementKey.split(':')[1]);
 							} else {
 								socket.emit('action', {
 									type: 'drive/ferry',
@@ -195,6 +216,9 @@ function pandemicGame(){
 				if (gameData.isAirliftingPlayer) {
 					gameData.airliftTarget = uiElementKey.split(':')[1];
 					alert('Please click a city to airlift the player to.');
+				} else if (gameData.isDispatching) {
+					gameData.dispatchTarget = uiElementKey.split(':')[1];
+					alert('Please click on a city to dispatch the player to.');
 				}
 			} else if (uiElementKey =="READY_BUTTON_FALSE") {
 				socket.emit("player ready");	
@@ -249,7 +273,9 @@ function pandemicGame(){
 			} else if (uiElementKey.startsWith('GIVE_CARD')) {
 				if (gameData.isPaused) {
 					// TODO: Paused message
-				} else {
+				} else if (Object.values(gameData.players).find(player=>player.name===gameData.my_player).role.name==="Researcher") {
+					researcherWindowGive(uiElementKey.split(':')[1]);
+				}else {
 					socket.emit('action', {
 						type: 'give city card',
 						otherPlayer: uiElementKey.split(':')[1]
@@ -260,6 +286,8 @@ function pandemicGame(){
 			} else if (uiElementKey.startsWith('TAKE_CARD')) {
 				if (gameData.isPaused) {
 					// TODO: Paused message
+				} else if (Object.values(gameData.players).find(player=>player.name===uiElementKey.split(':')[1]).role.name==="Researcher") {
+					researcherWindowTake(uiElementKey.split(':')[1]);	
 				} else {
 					socket.emit('action', {
 						type: 'take city card', 
@@ -273,6 +301,14 @@ function pandemicGame(){
 					//TODO: Paused message
 				} else {
 					discoverCureWindow(uiElementKey.split(':')[1]);
+				}
+			} else if (uiElementKey.startsWith('DISPATCH')) {
+				if (gameData.isPaused) {
+					
+				} else {
+					// TODO: dispatch action	
+					gameData.isDispatching = true;
+					alert('Click on a players name to select them for dispatch');
 				}
 			} else if (uiElementKey.startsWith('CARD')) {
 				let isInMyHand = Object.values(gameData.players)
@@ -330,7 +366,298 @@ function pandemicGame(){
 						}
 					}
 				}
+			} else if (uiElementKey.startsWith('CONTINGENCY_CARD')) {
+				let isInMyHand = Object.values(gameData.players)
+					.find(player => player.name === gameData.my_player)
+					.cards.map(card=>card.name)
+					.includes(uiElementKey.split(':')[1])
+
+				if (isInMyHand) {
+					switch(uiElementKey.split(':')[1]) {
+						case 'Airlift':
+							alert('Please click the name of the player you want to airlift.');
+							gameData.isAirliftingPlayer = true;
+							break;
+						case 'One quiet night':
+							socket.emit('event card played', {
+								name: 'One quiet night'
+							});
+							break;
+						case 'Forecast':
+							forecastWindow();
+							break;
+						case 'Government Grant':
+							alert('Please click the name of the city you would like to build a research station in.');
+							gameData.isUsingGovernmentGrant = true;
+							break;
+						case 'Resilient Population':
+							resilientPopulationWindow();
+							break;
+					}
+				}
+			} else if (uiElementKey.startsWith('GET_CONTINGENCY_CARD')) {
+				contingencyCardWindow();
 			}
+	}
+
+	function contingencyCardWindow() {
+		let cWindow = document.createElement('div');
+		cWindow.style = `  
+			position:absolute; 
+			left: 600px; 
+			top: 300px; 
+			background-color: white; 
+			padding:10px; 
+			font-family:Arial;
+			border: 2px black;
+			box-shadow: 2px 2px 5px black;
+			border-radius: 8px;`;
+		document.body.appendChild(cWindow);
+		let title = document.createElement('p');
+		title.innerText = `Pick a contingency card. If you already have a contingency card, this will replace it.`;
+		cWindow.appendChild(title);
+		let eventCardNames = ['Airlift', 'One quiet night', 'Forecast', 'Government Grant', 'Resilient Population'];
+		gameData.playerDiscardPile.filter(card=>eventCardNames.includes(card.name)).forEach(card=>{
+			let container = document.createElement('div');
+			cWindow.appendChild(container);
+			let button = document.createElement('button'); 
+			button.innerText = '+' 
+			button.onclick = () => {
+				socket.emit('action', {
+					type: 'contingency special action',
+					card: card.name
+				});
+				cWindow.parentNode.removeChild(cWindow);
+			};
+			container.appendChild(button);
+			cardText = document.createElement('span');
+			cardText.innerText = card.name;
+			container.appendChild(cardText);
+		});
+		let cancelButton = document.createElement('button');
+		cancelButton.innerText = "Cancel";
+		cancelButton.onclick = () => {
+			gameData.isDispatching = false;
+			gameData.dispatchTarget = false;
+			cWindow.parentNode.removeChild(cWindow);
+		};
+		cWindow.appendChild(cancelButton);
+	}
+
+	function dispatchLogic(fromPlayer, toLocation) {
+		let cards = Object.values(gameData.players).find(player=>player.name===gameData.my_player).cards.map(card=>card.name);
+		let fromLocation = Object.values(gameData.players).find(player=>player.name===fromPlayer).location;
+		if (cards.includes(toLocation) && cards.includes(fromLocation)) {
+			let dWindow = document.createElement('div');
+			dWindow.style = `  
+				position:absolute; 
+				left: 600px; 
+				top: 300px; 
+				background-color: white; 
+				padding:10px; 
+				font-family:Arial;
+				border: 2px black;
+				box-shadow: 2px 2px 5px black;
+				border-radius: 8px;`;
+			document.body.appendChild(dWindow);
+
+			let title = document.createElement('p');
+			title.innerText = `Choose a card to discard in order to dispatch ${fromPlayer} to ${toLocation}.`;
+			dWindow.appendChild(title);
+
+			let toElement = document.createElement('div');
+			let toElementButton = document.createElement('button');
+			toElementButton.innerText = '✘';
+			toElementButton.onclick = () => {
+				socket.emit('action', {
+					type: 'dispatcher special action',
+					fromPlayer: fromPlayer,
+					toLocation: toLocation,
+					card: toLocation
+				});
+				gameData.isDispatching = false;
+				gameData.dispatchTarget = false;
+				dWindow.parentNode.removeChild(dWindow);
+			};
+			toElement.appendChild(toElementButton);
+			let toElementText = document.createElement('span');
+			toElementText.innerText = `${toLocation} (Direct Flight)`
+			toElement.appendChild(toElementText);
+			dWindow.appendChild(toElement);
+
+			let fromElement = document.createElement('div');
+			let fromElementButton = document.createElement('button');
+			fromElementButton.innerText = '✘';
+			fromElementButton.onclick = () => {
+				socket.emit('action', {
+					type: 'dispatcher special action',
+					fromPlayer: fromPlayer,
+					toLocation: toLocation,
+					card: fromLocation
+				});
+				gameData.isDispatching = false;
+				gameData.dispatchTarget = false;
+				dWindow.parentNode.removeChild(dWindow);
+			};
+			fromElement.appendChild(fromElementButton);
+			let fromElementText = document.createElement('span');
+			fromElementText.innerText = `${fromLocation} (Charter Flight)`
+			fromElement.appendChild(fromElementText);
+			dWindow.appendChild(fromElement);
+
+			let cancelButton = document.createElement('button');
+			cancelButton.innerText = "Cancel";
+			cancelButton.onclick = () => {
+				gameData.isDispatching = false;
+				gameData.dispatchTarget = false;
+				dWindow.parentNode.removeChild(dWindow);
+			};
+			dWindow.appendChild(cancelButton);
+		} else {
+			socket.emit('action', {
+				type: 'dispatcher special action',
+				fromPlayer: fromPlayer,
+				toLocation: toLocation,
+				card: false
+			});
+			gameData.isDispatching = false;
+			gameData.dispatchTarget = false;
+		}
+	}
+
+	function operationsExpertShuttleWindow(destination) {
+		let oWindow = document.createElement('div');
+		oWindow.style = `  
+			position:absolute; 
+			left: 600px; 
+			top: 300px; 
+			background-color: white; 
+			padding:10px; 
+			font-family:Arial;
+			border: 2px black;
+			box-shadow: 2px 2px 5px black;
+			border-radius: 8px;`;
+		document.body.appendChild(oWindow);
+
+		let title = document.createElement('p');
+		title.innerText = `Choose a card to discard in order to travel to ${destination}.`;
+		oWindow.appendChild(title);
+
+		Object.values(gameData.players).find(player=>player.name===gameData.my_player).cards.filter(card=>card.type==="city").forEach(card=>{
+			let container = document.createElement('div');
+			oWindow.appendChild(container);
+			let button = document.createElement('button');
+			button.innerText = '✘';
+			button.onclick = () => {
+				socket.emit('action', {
+					type: 'operations expert shuttle',
+					card: card.name,
+					city: destination
+				});
+				oWindow.parentNode.removeChild(oWindow);
+			};
+			container.appendChild(button);
+			let cardName = document.createElement('span');
+			cardName.innerText= card.name;
+			container.appendChild(cardName);
+		});
+		
+		let cancelButton = document.createElement('button');
+		cancelButton.innerText = "Cancel";
+		cancelButton.onclick = () => {
+			oWindow.parentNode.removeChild(oWindow);
+		};
+		oWindow.appendChild(cancelButton);
+	}
+
+	function researcherWindowTake(otherPlayer) {
+		let rWindow = document.createElement('div');
+		rWindow.style = `  
+			position:absolute; 
+			left: 600px; 
+			top: 300px; 
+			background-color: white; 
+			padding:10px; 
+			font-family:Arial;
+			border: 2px black;
+			box-shadow: 2px 2px 5px black;
+			border-radius: 8px;`;
+		document.body.appendChild(rWindow);
+
+		let title = document.createElement('p');
+		title.innerText = `Choose a card from ${otherPlayer}'s hand to take.`;
+		rWindow.appendChild(title);
+
+		Object.values(gameData.players).find(player=>player.name===otherPlayer).cards.filter(card=>card.type==="city").forEach(card=>{
+			let container = document.createElement('div');
+			rWindow.appendChild(container);
+			let button = document.createElement('button');
+			button.innerText = '←';
+			button.onclick = () => {
+				socket.emit('action', {
+					type: 'researcher special action take',
+					card: card.name,
+					otherPlayer: otherPlayer
+				});
+				rWindow.parentNode.removeChild(rWindow);
+			};
+			container.appendChild(button);
+			let cardName = document.createElement('span');
+			cardName.innerText= card.name;
+			container.appendChild(cardName);
+		});
+		
+		let cancelButton = document.createElement('button');
+		cancelButton.innerText = "Cancel";
+		cancelButton.onclick = () => {
+			rWindow.parentNode.removeChild(rWindow);
+		};
+		rWindow.appendChild(cancelButton);
+	}
+
+	function researcherWindowGive(otherPlayer) {
+		let rWindow = document.createElement('div');
+		rWindow.style = `  
+			position:absolute; 
+			left: 600px; 
+			top: 300px; 
+			background-color: white; 
+			padding:10px; 
+			font-family:Arial;
+			border: 2px black;
+			box-shadow: 2px 2px 5px black;
+			border-radius: 8px;`;
+		document.body.appendChild(rWindow);
+
+		let title = document.createElement('p');
+		title.innerText = `Choose a card from your hand to give to ${otherPlayer}`;
+		rWindow.appendChild(title);
+
+		Object.values(gameData.players).find(player=>player.name===gameData.my_player).cards.filter(card=>card.type==="city").forEach(card=>{
+			let container = document.createElement('div');
+			rWindow.appendChild(container);
+			let button = document.createElement('button');
+			button.innerText = '→';
+			button.onclick = () => {
+				socket.emit('action', {
+					type: 'researcher special action give',
+					card: card.name,
+					otherPlayer: otherPlayer
+				});
+				rWindow.parentNode.removeChild(rWindow);
+			};
+			container.appendChild(button);
+			let cardName = document.createElement('span');
+			cardName.innerText= card.name;
+			container.appendChild(cardName);
+		});
+		
+		let cancelButton = document.createElement('button');
+		cancelButton.innerText = "Cancel";
+		cancelButton.onclick = () => {
+			rWindow.parentNode.removeChild(rWindow);
+		};
+		rWindow.appendChild(cancelButton);
 	}
 
 	function resilientPopulationWindow() {
@@ -459,9 +786,7 @@ function pandemicGame(){
 	}
 
 	function discoverCureWindow(color) {
-
 		let cureWindow = document.createElement('div');
-
 		cureWindow.style = `
 			position:absolute; 
 			left: 600px; 
@@ -505,8 +830,9 @@ function pandemicGame(){
 		let okButton = document.createElement('button');
 		okButton.innerText = "OK";
 		okButton.onclick = () => {
-			if (checkBoxes.filter(checkBox=>checkBox.checked) < 5) {
-				alert('5 cards are needed to cure a disease.')
+			let isScientist = Object.values(gameData.players).find(player=>player.name===gameData.my_player).role.name === "Scientist";
+			if (checkBoxes.filter(checkBox=>checkBox.checked) < isScientist ? 4 : 5) {
+				alert('5 cards are needed to cure a disease, 4 if a scientist.')
 			} else {
 				socket.emit('action', {
 					type: 'discover cure',
@@ -535,8 +861,6 @@ function pandemicGame(){
 		gameData.players = players;
 		draw();
 	});
-
-
 
 	function draw() {
 		context.clearRect(0, 0, canvas.width, canvas.height);
@@ -684,7 +1008,10 @@ function pandemicGame(){
 				'CARD',
 				'BUILD_RESEARCH_STATION',
 				'GIVE_CARD',
-				'TAKE_CARD'
+				'TAKE_CARD',
+				'DISPATCH',
+				'GET_CONTINGENCY_CARD',
+				'CONTINGENCY_CARD'
 			];
 			for (let key of Object.keys(gameData.uiElements)) {
 				if (elementsToDestroy.some(prefix => key.startsWith(prefix))) {
@@ -750,6 +1077,22 @@ function pandemicGame(){
 				gameData.uiElements['CURE:red'] = drawButtonOverlay(247, 735, 282, 775);
 				gameData.uiElements['CURE:black'] = drawButtonOverlay(306, 735, 338, 775);
 
+				context.fillStyle = 'white';
+				context.font = "28px Arial";
+				if (gameData.diseases) {
+					if (gameData.diseases['blue'].cured) {
+						context.fillText('✘', 138, 767);
+					}
+					if (gameData.diseases['yellow'].cured) {
+						context.fillText('✘', 196, 767);
+					}
+					if (gameData.diseases['red'].cured) {
+						context.fillText('✘', 254, 767);
+					}
+					if (gameData.diseases['black'].cured) {
+						context.fillText('✘', 312, 767);
+					}
+				}
 			}
 
 			function drawPlayers() {
@@ -912,14 +1255,37 @@ function pandemicGame(){
 						gameData.uiElements[`CARD:${card.name}`] = drawButton(card.name, x, y, "black", card.color, 13, padX=1, padY=1, alpha=0.3);
 						y += 15;
 					});
-					gameData.uiElements[`GIVE_CARD:${playerName}`] = drawButton('Give city card', 837, 665, 'black', 'beige', 11);
-					gameData.uiElements[`TAKE_CARD:${playerName}`] = drawButton('Take city card', 837, 705, 'black', 'beige', 11);
+
+					let playerObj = Object.values(gameData.players).find(player => player.name === gameData.my_player)
+					if (playerObj.contingencyCard && playerName === gameData.my_player) {
+						gameData.uiElements[`CONTINGENCY_CARD:${playerObj.contingencyCard}`] = drawButton(playerObj.contingencyCard.name, 716, 685, 'black', playerObj.contingencyCard.color, 13, padX=1, padY=1, alpha=0.3);
+					}
+
+					if (playerName === gameData.my_player && playerObj.role.name === 'Contingency Planner') {
+						gameData.uiElements[`GET_CONTINGENCY_CARD`] = drawButton('Pick contingency card', 817, 736, 'white', 'MediumSlateBlue', 13, padX=5, padY = 15);
+					}
+
+					if (playerName === gameData.my_player) {
+						let role = Object.values(gameData.players).find(player=>player.name===gameData.my_player).role;
+						context.font = '16px Arial';
+						context.fillStyle = 'black';
+						context.fillText(`Actions: ${Object.values(gameData.players).find(player=>player.name===playerName).actionPoints}`, 720, 665);
+						wrapText(role.name, 817, 665, 130, 16);
+						context.font = '11px Arial';
+						wrapText(role.description, 817, 695, 130, 11);
+					}
+					if (playerName !== gameData.my_player) {
+						gameData.uiElements[`GIVE_CARD:${playerName}`] = drawButton('Give city card', 837, 665, 'black', 'beige', 11);
+						gameData.uiElements[`TAKE_CARD:${playerName}`] = drawButton('Take city card', 837, 705, 'black', 'beige', 11);
+					}
+					if (Object.values(gameData.players).find(player=>player.name===gameData.my_player).role.name==="Dispatcher" && playerName !==gameData.my_player) {
+						gameData.uiElements[`DISPATCH:${playerName}`] = drawButton('Dispatch', 837 , 745, 'white', 'MediumSlateBlue', 11, padX=54, padY=7);
+					}
 				}
 			}
 		}
 
 	}
-
 
 	function getMousePos(cavas, evt) {
 		var rect = canvas.getBoundingClientRect();
@@ -927,6 +1293,32 @@ function pandemicGame(){
 			x: evt.clientX - rect.left,
 			y: evt.clientY - rect.top
 		};
+	}
+
+	function gameOver(data) {
+		socket.off('players');
+		socket.off('cities');
+		let gWindow = document.createElement('div');
+		gWindow.style = `  
+			position:absolute; 
+			left: 600px; 
+			top: 300px; 
+			background-color: white; 
+			padding:10px; 
+			font-family:Arial;
+			border: 2px black;
+			box-shadow: 2px 2px 5px black;
+			border-radius: 8px;
+			max-width: 400px;`;
+		document.body.appendChild(gWindow);
+
+		let title = document.createElement('h1');
+		title.innerText = 'Game Over';
+		gWindow.appendChild(title);
+
+		let message = document.createElement('p');
+		message.innerText = data.message;
+		gWindow.appendChild(message);
 	}
 }
 

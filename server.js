@@ -43,15 +43,6 @@ io.on('connection', function(socket) {
 
 let MESSAGE_LOG = [];
 
-function info(message, socket=null) {
-	if (socket) {
-		socket.emit('info', {from: 'server', message: message});
-	} else {
-		io.sockets.emit('info', {from:'server', message: message});
-		MESSAGE_LOG.push({from: 'server', message: message})
-	}
-}
-
 let MAX_DISEASE_COUNT = 24;
 let MAX_OUTBREAKS = 8;
 let TURN, OUTBREAKS, DISEASES, PLAYER_DECK, INFECTION_DECK, INFECTION_RATE, INFECTION_RATE_RACK, INFECTION_DISCARD_PILE;
@@ -67,6 +58,14 @@ let numResearchStations = 0;
 
 INFECTION_RATE_RACK = [2, 2, 2, 3, 3, 4, 4]
 INFECTION_RATE = 0;
+
+let pickedPawns = []
+let pickedRoles = [];
+
+let tickInterval = setInterval(function() {
+	io.sockets.emit('players', players);
+	io.sockets.emit('cities', cities);
+}, 1000 / 5);
 
 let GAME_STARTED = false;
 
@@ -422,6 +421,15 @@ cities.forEach(city => {
 
 placeResearchStation("Atlanta");
 
+function info(message, socket=null) {
+	if (socket) {
+		socket.emit('info', {from: 'server', message: message});
+	} else {
+		io.sockets.emit('info', {from:'server', message: message});
+		MESSAGE_LOG.push({from: 'server', message: message})
+		console.log(message);
+	}
+}
 
 function placeResearchStation (cityName) {
 	cityIndex = cities.findIndex(city => city.name === cityName);
@@ -438,12 +446,11 @@ function placeResearchStation (cityName) {
 	return {result: "success", reason: ""}
 }
 
-let pickedRoles = [];
 function getRole() {
 	let roles = [
 		{
 			name: "Medic",
-			description: "Remove all cubes of a single color when you treat a city.\n-Administer known cures for free."
+			description: "Remove all cubes of a single color when you treat a city.\nAdminister known cures for free."
 		},
 		{
 			name: "Researcher",
@@ -482,7 +489,6 @@ function getRole() {
 	return newRole;
 }
 
-let pickedPawns = []
 function getPawn() {
 	let pawnColors = ["WhiteSmoke","SkyBlue","Orange","SpringGreen","SeaGreen", "Brown", "Pink"]
 	let newPawn = undefined;
@@ -500,7 +506,6 @@ function getPawn() {
 function newPlayer(name, socket) {
 	// Returning players get the socket id changed to their new socket id
 	let returningPlayer = false;
-
 	Object.entries(players).forEach(([playerSocketId, player]) => {
 		if (player.name === name) {
 			Object.defineProperty(players, socket.id, Object.getOwnPropertyDescriptor(players, playerSocketId));
@@ -510,7 +515,6 @@ function newPlayer(name, socket) {
 			returningPlayer = true;
 		}
 	})
-
 	// After maxPlayers have joined make new players spectators
 	if (!returningPlayer) {
 		if (numPlayers >= maxPlayers && GAME_STARTED === true) {
@@ -525,53 +529,45 @@ function newPlayer(name, socket) {
 				playerOrder: numPlayers++,
 				role: getRole(),
 				pawn: getPawn(),
-				actionPoints: 0
+				actionPoints: 0,
+				contingencyCard: null
 			}
 			io.to(socket.id).emit('your name is', players[socket.id].name)
 			io.to(socket.id).emit('cities', cities);
 		}
 	}
-
 	if (GAME_STARTED) {
 		io.sockets.emit('game started');
 	}
-
 	if (GAME_PAUSED) {
 		socket.emit('paused', PAUSED_OBJECT);
 	}
-
 	if (PLAYER_DISCARDING === name) {
 		socket.emit('force discard card');
 	}
-
 	if (TURN) {
 		socket.emit('turn', TURN);
 	}
-
 	if (OUTBREAKS) {
 		socket.emit('outbreaks', OUTBREAKS);
 	}
-
 	if (DISEASES) {
 		socket.emit('diseases', DISEASES);
 	}
-
 	if (INFECTION_RATE_RACK) {
-		console.log('sending infection rate');
-		console.log(INFECTION_RATE_RACK[INFECTION_RATE]);
 		socket.emit('infection rate', INFECTION_RATE_RACK[INFECTION_RATE])
 	}
-
 	if (PLAYER_DECK) {
 		socket.emit('player deck N', PLAYER_DECK.length);
 	}
-
 	for (let message of MESSAGE_LOG) {
 		info(message.message, socket);
 	}
-
 	if (INFECTION_DISCARD_PILE) {
 		socket.emit('infection discard pile', INFECTION_DISCARD_PILE);
+	}
+	if (PLAYER_DISCARD_PILE) {
+		socket.emit('player discard pile', PLAYER_DISCARD_PILE);
 	}
 }
 
@@ -618,6 +614,7 @@ function startGame(socket) {
 		INFECTION_DISCARD_PILE = [];
 		io.sockets.emit('infection discard pile', INFECTION_DISCARD_PILE);
 		PLAYER_DISCARD_PILE = [];
+		io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
 		GAME_PAUSED = false;
 		TURN = {
 			N: 0,
@@ -640,17 +637,17 @@ function startGame(socket) {
 			}
 		}
 		
-		console.log('Shuffling deck.');
+		info('Shuffling deck.');
 		newDeck();
 
-		console.log('Drawing player cards.');
+		info('Drawing player cards.');
 		// Draw player cards
 		for (let player of Object.values(players)) {
 			let cardsToDraw = {2: 4, 3: 3, 4: 2};
 			Array.from(Array(cardsToDraw[numPlayers])).forEach(() => drawCard(player));
 		}
 
-		console.log("Adding epidemic cards to deck.");
+		info('Adding epidemic cards to deck.');
 		let chunkedDeck = chunkify(PLAYER_DECK, 4);
 
 		chunkedDeck.forEach(deck => {deck.splice(randomInt(0, deck.length - 1), 0, {
@@ -667,7 +664,7 @@ function startGame(socket) {
 			first3InfectedCities.forEach(infectionCard => {
 				let city = cities.find(city => city.name === infectionCard.name);
 				city.diseaseCounts[city.color] += amountToInfect;
-				console.log(`city: ${city.name} ${amountToInfect} new infections.`);
+				info(`city: ${city.name} ${amountToInfect} new infections.`);
 			})
 			Array.prototype.push.apply(INFECTION_DISCARD_PILE, first3InfectedCities);
 			io.sockets.emit('infection discard pile', INFECTION_DISCARD_PILE);
@@ -722,12 +719,31 @@ function startGame(socket) {
 }
 
 function executeEventCard(socket, data) {
+	let hasAirlift = players[socket.id].cards.map(card=>card.name).includes('Airlift');
+	let hasAirliftCont = players[socket.id].contingencyCard === 'Airlift';
+	let hasQuiet = players[socket.id].cards.map(card=>card.name).includes('One quiet night');
+	let hasQuietCont = players[socket.id].contingencyCard === 'One quiet night';
+	let hasForecast = players[socket.id].cards.map(card=>card.name).includes('Forecast');
+	let hasForecastCont = players[socket.id].contingencyCard === 'Forecast';
+	let hasGrant = players[socket.id].cards.map(card=>card.name).includes('Government Grant');
+	let hasGrantCont = players[socket.id].contingencyCard === 'Government Grant';
+	let hasPopulation = players[socket.id].cards.map(card=>card.name).includes('Resilient Population');
+	let hasPopulationCont = players[socket.id].contingencyCard === 'Resilient Population';
+
 	switch(data.name) {
 		case 'Airlift':
-			if (players[socket.id].cards.map(card=>card.name).includes('Airlift')) {
+			if (hasAirlift || hasAirliftCont) {
 				Object.values(players).find(player=>player.name===data.target).location = data.city;
-				let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Airlift');
-				players[socket.id].cards.splice(cardIndex,1);
+				medicLocationCheck(Object.values(players).find(player=>player.name===data.target));
+				 
+				if (hasAirlift) {
+					let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Airlift');
+					PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(cardIndex,1)[0]);
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
+				} else {
+					players[socket.id].contingencyCard = null;	
+				}
+
 				info(`${players[socket.id].name} airlifted ${data.target} to ${data.city}.`);
 				socket.emit('airlift succesful');
 			} else {
@@ -735,39 +751,56 @@ function executeEventCard(socket, data) {
 			}
 			break;
 		case 'One quiet night':
-			if (players[socket.id].cards.map(card=>card.name).includes('One quiet night')) {
+			if (hasQuiet || hasQuietCont) {
 				SKIP_INFECTION_PHASE = true;	
-				let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'One quiet night');
-				players[socket.id].cards.splice(cardIndex,1);
+				if (hasQuiet) {
+					let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'One quiet night');
+					PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(cardIndex,1)[0]);
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
+				} else {
+					players[socket.id].contingencyCard = null;	
+				}
 				info(`${players[socket.id].name} used the "One quiet night" card, skipping the next infection phase.`);
 			} else {
 				info('You do not have the One quiet night card.', socket)
 			}
 			break;
 		case 'Forecast':
-			if (players[socket.id].cards.map(card=>card.name).includes('Forecast')) {
+			if (hasForecast || hasForecastCont) {
 				INFECTION_DECK = data.cards.concat(INFECTION_DECK.slice(start=6));
-				let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Forecast');
-				players[socket.id].cards.splice(cardIndex,1);
+
+				if (hasForecast) {
+					let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Forecast');
+					PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(cardIndex,1)[0]);
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
+				} else {
+					players[socket.id].contingencyCard = null;	
+				}
+
 				info(`${players[socket.id].name} rearranged the top 6 cards of the infection deck to be: ${data.cards.map(card=>card.name).toString()}.`);
 			} else {
 				info('You do not have the Forecast card.', socket)
 			}
 			break;
-		case 'Government Grant':
+		case 'Goveplayers[socket.id].cards.splice(cardIndex,1);rnment Grant':
 			//TODO: Government Grant
 			if (cities.find(city=>city.name===data.target).researchStationState === 'built') {
 				info(`${data.city} already has a research station in it.`, socket);
 			} 
-			else if (players[socket.id].cards.map(card=>card.name).includes('Government Grant')) {
+			else if (hasGrant || hasGrantCont) {
 				cities.find(city=>city.name===data.target).researchStationState = 'built';
 				info(`${players[socket.id].name} build a research station in ${data.target}.`);
 				if (data.fromCity) {
 					cities.find(city=>city.name===data.fromCity).researchStationState = 'not built';
 					info(`${players[socket.id].name} removed a research station from ${data.fromCity}`);
 				}
-				let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Government Grant');
-				players[socket.id].cards.splice(cardIndex,1);
+				if (hasGrant) {
+					let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Government Grant');
+					PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(cardIndex,1));
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE)[0];
+				} else {
+					players[socket.id].contingencyCard = null;	
+				}
 			} else {
 				info('You do not have the Government Grant card.', socket);
 			}
@@ -775,11 +808,17 @@ function executeEventCard(socket, data) {
 			break;
 		case 'Resilient Population':
 			//TODO: Resilient Population
-			if (players[socket.id].cards.map(card=>card.name).includes('Resilient Population')) {
+			if (hasPopulation || hasPopulationCont) {
 				INFECTION_DISCARD_PILE.splice(INFECTION_DISCARD_PILE.findIndex(card=>card.name===data.card), 1);
 				info(`${players[socket.id].name} removed the infection card ${data.card} from the game.`);
-				let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Resilient Population');
-				players[socket.id].cards.splice(cardIndex, 1);
+
+				if (hasPopulation) {
+					let cardIndex = players[socket.id].cards.findIndex(card => card.name === 'Resilient Population');
+					PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(cardIndex, 1)[0]);
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
+				} else {
+					players[socket.id].contingencyCard = null;	
+				}
 			} else {
 				info('You do not have the Resilient Population card.', socket);
 			}
@@ -787,12 +826,26 @@ function executeEventCard(socket, data) {
 	}
 }
 
+function medicLocationCheck(player) {
+	let isMedic = player.role.name === "Medic";
+	if (isMedic) {
+		for (let [color, value] of Object.entries(DISEASES)){
+			if (value.cured) {
+				cities.find(city=>city.name === player.location).diseaseCounts[color] = 0;
+				info(`${player.name} wiped out ${color} disease in ${player.location}.`);
+			}
+		}
+	}
+
+}
+
 function executeAction(socket, action) {
-	//console.log({turn:TURN, player: players[socket.id], action,})
 	if (!GAME_STARTED) {
 		return;
 	}
 	if (players[socket.id].name === TURN.player) {
+		let isMedic = players[socket.id].role.name === "Medic";
+		let isScientist = players[socket.id].role.name === "Scientist";
 		switch(action.type) {
 			case 'drive/ferry':
 				if (players[socket.id].actionPoints <= 0) {
@@ -801,6 +854,7 @@ function executeAction(socket, action) {
 					info(`You cannot drive/ferry to this city (not an adjacent city).`, socket);
 				} else {
 					players[socket.id].location = action.city;
+					medicLocationCheck(players[socket.id]);
 					players[socket.id].actionPoints--;
 					info(`${players[socket.id].name} drove/ferried to ${action.city}.`);
 				}
@@ -813,6 +867,7 @@ function executeAction(socket, action) {
 					info('You do not have a city card that matches the city you want to fly to.', socket);
 				} else {
 					players[socket.id].location = action.city;
+					medicLocationCheck(players[socket.id]);
 					players[socket.id].cards.splice(players[socket.id].cards.findIndex(card => card.name === action.city), 1);
 					players[socket.id].actionPoints--;
 					info(`${players[socket.id].name} took a direct flight to ${action.city}.`)
@@ -826,6 +881,7 @@ function executeAction(socket, action) {
 					info(`You do not have the card that matches the city you are in.`, socket);
 				} else {
 					players[socket.id].location = action.city;
+					medicLocationCheck(players[socket.id]);
 					players[socket.id].actionPoints--;
 					info(`${players[socket.id].name} chartered a flight to ${action.location}`);
 				}
@@ -836,43 +892,74 @@ function executeAction(socket, action) {
 				let destinationHasStation = cities.find(city => city.name === action.city).researchStationState === 'built';
 				if (players[socket.id].actionPoints <= 0) {
 					info('Not enough action points.', socket);
-					break;
 				} else if (!playerAtStation) {
 					info('No research station at your location.', socket);
-					break;
 				} else if (!destinationHasStation) {
 					info('No research station at the destination.', socket);
-					break;
 				} else {
 					players[socket.id].location = action.city;
+					medicLocationCheck(players[socket.id]);
 					players[socket.id].actionPoints--;
 					info(`${players[socket.id].name} took a shuttle flight to ${action.city}.`)
-					break;
 				}
+				break;
+
+			case 'operations expert shuttle':
+				if (players[socket.id].actionPoints <= 0) {
+					info('Not enough action points.', socket);
+				} else if (!playerAtStation) {
+					info('No research station at your location.', socket);
+				} else {
+					let cardIndex = players[socket.id].cards.findIndex(card=>card.name===action.card);
+					players[socket.id].cards.splice(cardIndex, 1);
+					players[socket.id].location = action.city;
+					medicLocationCheck(players[socket.id]);
+					players[socket.id].actionPoints--;
+					info(`${players[socket.id].name} took a shuttle flight to ${action.city}.`)
+				}
+				break;
 
 			case 'build research station':
 				if (players[socket.id].actionPoints <= 0) {
 					io.sockets.to(socket.id).emit('result', {success: false, reason: 'Not enough action points.'});
 				} else if (players[socket.id].location !== action.city) {
 				info('You must be in a city to build a research station in it',socket);
-				}else {
+				} else {
 					if (action.removeFromCity) {
 						if (cities.find(city => city.name === action.city).researchStationState !== 'built') {
 							info('Cannot move research station from a city that does not have a research station.', socket);
 						} else {
-							cities.find(city => city.name === action.removeFromCity).researchStationState = 'not built'
-							cities.find(city => city.name === action.city).researchStationState = 'built';
-							players[socket.id].actionPoints--;
+							let cityCard = players[socket.id].cards.findIndex(card=>card.name===action.city);
+							if (players[socket.id].role.name==="Operations Expert") {
+								cities.find(city => city.name === action.removeFromCity).researchStationState = 'not built'
+								cities.find(city => city.name === action.city).researchStationState = 'built';
+								players[socket.id].actionPoints--;
+							} else if (typeof cityCard !== 'undefined') {
+								cities.find(city => city.name === action.removeFromCity).researchStationState = 'not built'
+								cities.find(city => city.name === action.city).researchStationState = 'built';
+								players[socket.id].actionPoints--;
+								players[socket.id].cards.splice(cityCard, 1);
+							} else {
+								info('You must have the card that matches the city you are in to build a research station there.', socket);
+							}
 						}
 					} else {
 						if (numResearchStations >= maxResearchStations) {
-							io.sockets.to(socket.id).emit('result', {
-								success: false, 
-								reason: 'Max 6 research stations allowed on the board at one time. You can move research stations however.'});
+							info('Max 6 research stations allowed. You can move a research station however', socket);
 						} else {
-							numResearchStations++;
-							cities.find(city => city.name === action.city).researchStationState = 'built';
-							players[socket.id].actionPoints--;
+							let cityCard = players[socket.id].cards.findIndex(card=>card.name===action.city);
+							if (players[socket.id].role.name==="Operations Expert") {
+								numResearchStations++;
+								cities.find(city => city.name === action.city).researchStationState = 'built';
+								players[socket.id].actionPoints--;
+							}  else if (typeof cityCard !== 'undefined') {
+								numResearchStations++;
+								cities.find(city => city.name === action.city).researchStationState = 'built';
+								players[socket.id].actionPoints--;
+								players[socket.id].cards.splice(cityCard, 1);
+							} else {
+								info('You must have the card that matches the city you are in to build a research station there.', socket);
+							}
 						}
 					}
 				}
@@ -885,11 +972,15 @@ function executeAction(socket, action) {
 					if (DISEASES[action.color].cured) {
 						cities.find(city => city.name === players[socket.id].location).diseaseCounts[action.color] = 0;
 						players[socket.id].actionPoints--;
-						info(`${players[socket.id].name} treated `);
+						info(`${players[socket.id].name} treated ${action.color} disease in ${players[socket.id].location}.`);
 					} else if (cities.find(city => city.name === players[socket.id].location).diseaseCounts[action.color] <= 0) {
 						info(`The city you are in has no ${action.color} diseases.`);
 					} else {
-						cities.find(city => city.name === players[socket.id].location).diseaseCounts[action.color]--;
+						if (isMedic) {
+							cities.find(city => city.name === players[socket.id].location).diseaseCounts[action.color] = 0;
+						} else {
+							cities.find(city => city.name === players[socket.id].location).diseaseCounts[action.color]--;
+						}
 						players[socket.id].actionPoints--;
 					}
 				}
@@ -944,8 +1035,10 @@ function executeAction(socket, action) {
 					info('Not enough action points', socket);
 				} else if (cities.find(city => city.name === players[socket.id].location).researchStationState === 'not built') {
 					info('You are not in a city with a research station.', socket);
-				} else if (!(action.cards.length == 5 && action.cards.every(card=>card.color === action.color))) {
-					info('You must select 5 cards of the same color in order to discover a cure.', socket);
+				} else if (!((action.cards.length == isScientist ? 4 : 5) && action.cards.every(card=>card.color === action.color))) {
+					info('You must select 5 cards of the same color in order to discover a cure, 4 if a scientist.', socket);
+				} else if (DISEASES[action.color].cured === true) {
+					info('This disease has already been cured.');
 				} else {
 					for (let card of action.cards) {
 						let cardIndex = players[socket.id].cards.findIndex(pCard=> pCard.name === card.name);
@@ -953,8 +1046,107 @@ function executeAction(socket, action) {
 					}
 					DISEASES[action.color].cured = true;
 					players[socket.id].actionPoints--;
+					io.sockets.emit('diseases', DISEASES);
 					info(`${players[socket.id].name} discovered a cure for the ${action.color} disease.`);
 				}
+				break;
+
+			case 'researcher special action give':
+				if (players[socket.id].actionPoints <= 0) {
+					info('Not enough action points', socket);
+				} else if (players[socket.id].location !== Object.values(players).find(player=>player.name===action.otherPlayer).location) {
+					info('You must be in the same city as the other player to give a card.', socket);
+				} else {
+					let otherPlayer = Object.values(players).find(player=>player.name===action.otherPlayer);
+					let cardIndex = players[socket.id].cards.findIndex(card=>card.name===action.card);
+					let card = players[socket.id].cards.splice(cardIndex, 1)[0];
+					otherPlayer.cards.push(card);
+					players[socket.id].actionPoints--;
+					info(`${players[socket.id].name} gave the card ${card.name} to ${action.otherPlayer}`);
+					let otherPlayerSocketID = Object.keys(players).find(key=> players[key].name === action.otherPlayer);
+					if (otherPlayer.cards.length > 7) {
+						forceDiscardCard(otherPlayerSocketID);
+					}
+				}
+				break;
+
+			case 'researcher special action take':
+				if (players[socket.id].actionPoints <= 0) {
+					info('Not enough action points', socket);
+				} else if (players[socket.id].location !== Object.values(players).find(player=>player.name===action.otherPlayer).location) {
+					info('You must be in the same city as the other player to take a card.', socket);
+				} else {
+					let otherPlayer = Object.values(players).find(player=>player.name===action.otherPlayer);
+					let cardIndex = otherPlayer.cards.findIndex(card=>card.name===action.card);
+					let card = otherPlayer.cards.splice(cardIndex, 1)[0];
+					players[socket.id].cards.push(card);
+					players[socket.id].actionPoints--;
+					info(`${players[socket.id].name} took the card ${card.name} from ${action.otherPlayer}`);
+					if (players[socket.id].cards.length > 7) {
+						forceDiscardCard(socket.id);
+					}
+				}
+				break;
+
+			case 'dispatcher special action':
+				if (players[socket.id].actionPoints <= 0) {
+					info('Not enough action points', socket);
+				} else {
+					//{
+					//	fromPlayer,
+					//	toLocation,
+					//	card: optional
+					//}
+					let fromPlayer = Object.values(players).find(player=>player.name===action.fromPlayer);
+					let fromLocation = fromPlayer.location;
+					let fromNeighbors = cities.find(city=>city.name===fromLocation).neighbors;
+					let fromHasResearchStation = cities.find(city=>city.name===fromLocation).researchStationState === 'built';
+					let toHasResearchStation = cities.find(city=>city.name===action.toLocation).researchStationState === 'built';
+					let toLocationHasOtherPlayer = typeof Object.values(players).find(player=>player.location===action.toLocation) !== 'undefined';
+					if (toLocationHasOtherPlayer) {
+						fromPlayer.location = toLocation;
+						players[socket.id].actionPoints--;
+						info(`${players[socket.id].name} dispatched ${fromPlayer.name} to ${action.toLocation}.`);
+					} else if (fromNeighbors.includes(action.toLocation)) {
+						//TODO: drive/ferry
+						fromPlayer.location = action.toLocation;	
+						players[socket.id].actionPoints--;
+						info(`${players[socket.id].name} dispatched ${fromPlayer.name} to ${action.toLocation}.`);
+					} else if (action.card !== fromLocation) {
+						//TODO: direct flight (discard card and go to location)
+						let cardIndex = players[socket.id].cards.findIndex(card=>card.name===action.card);
+						players[socket.id].cards.splice(cardIndex,1);
+						fromPlayer.location = action.toLocation;
+						players[socket.id].actionPoints--;
+						info(`${players[socket.id].name} dispatched ${fromPlayer.name} to ${action.toLocation}.`);
+
+					} else if (action.card === fromLocation) {
+						//TODO: charter flight (discard card and go to any location)
+						let cardIndex = players[socket.id].cards.findIndex(card=>card.name===action.card);
+						players[socket.id].cards.splice(cardIndex,1);
+						fromPlayer.location = action.toLocation;
+						players[socket.id].actionPoints--;
+						info(`${players[socket.id].name} dispatched ${fromPlayer.name} to ${action.toLocation}.`);
+					} else if (fromHasResearchStation && toHasResearchStation) {
+						//TODO: shuttle flight (go from research station to research station)
+						fromPlayer.location = action.toLocation;
+						players[socket.id].actionPoints--;
+						info(`${players[socket.id].name} dispatched ${fromPlayer.name} to ${action.toLocation}.`);
+					} else {
+						info(`No valid movement`, socket);
+					}
+				}
+				break;
+
+			case 'contingency special action':
+				if (players[socket.id].actionPoints <= 0) {
+					info('Not enough action points', socket);
+				} else {
+					cardIndex = PLAYER_DISCARD_PILE.findIndex(card=>card.name===action.card);
+					players[socket.id].contingencyCard = PLAYER_DISCARD_PILE.splice(cardIndex, 1)[0];
+					io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
+				}
+				
 				break;
 		}
 		info(`You have ${players[socket.id].actionPoints} actions left.`, socket);
@@ -964,7 +1156,7 @@ function executeAction(socket, action) {
 
 	if (TURN.player === players[socket.id].name && players[socket.id].actionPoints <= 0) {
 		if (PLAYER_DECK.length <= 2) {
-			io.sockets.emit('game over', 'No more cards in the deck.')
+			gameOver('As your team blows past all the WHO deadlines confidence dries up. Your funding has been removed and no governments recognize your authority.');
 		}
 		drawCard(players[socket.id]);
 		checkEpidemic(socket);
@@ -979,7 +1171,6 @@ function executeAction(socket, action) {
 		Object.values(players).find(player => player.name === TURN.player).actionPoints = 4;
 		socket.emit('turn', TURN);
 		info(`It is now turn ${TURN.N} (${TURN.player})`);
-		console.log(`It is now turn ${TURN.N} (${TURN.player})`);
 
 		if (SKIP_INFECTION_PHASE) {
 			SKIP_INFECTION_PHASE = false;
@@ -987,12 +1178,23 @@ function executeAction(socket, action) {
 			for (let i = 0; i < INFECTION_RATE_RACK[INFECTION_RATE]; i++) {
 				let infectedCity = INFECTION_DECK.shift();
 				let city = cities.find(city => city.name === infectedCity.name);
-				city.diseaseCounts[city.color]++;
-				info(`${city.name} has a new case of ${city.color} disease.`)
-				if (city.diseaseCounts[city.color] > 3) {
-					city.diseaseCounts[city.color] = 3;
-					checkMaxDiseaseCount();
-					outbreak(city, city.color, [city.name]);
+
+				let quarantineSpecialist = Object.values(players).find(player=>player.role.name==="Quarantine Specialist");
+				let quarantineSpecialistEffect = [];
+				if (typeof quarantineSpecialist !== 'undefined') {
+					let quarantineCity = qurantineSpecialist.location;
+					quarantineSpecialistEffect.push(quarantineCity);
+					cities.find(city=>city.name===quarantineCity).neighbors.forEach(neighbor=>quarantineSpecialistEffect.push(neighbor));
+				}
+
+				if (!quarantineSpecialistEffect.includes(city.name)) {
+					city.diseaseCounts[city.color]++;
+					info(`${city.name} has a new case of ${city.color} disease.`)
+					if (city.diseaseCounts[city.color] > 3) {
+						city.diseaseCounts[city.color] = 3;
+						checkMaxDiseaseCount();
+						outbreak(city, city.color, [city.name]);
+					}
 				}
 				INFECTION_DISCARD_PILE.push(infectedCity);
 				io.sockets.emit('infection discard pile', INFECTION_DISCARD_PILE);
@@ -1008,13 +1210,23 @@ function checkEpidemic(socket) {
 		INFECTION_RATE++;	
 		io.sockets.emit('infection rate', INFECTION_RATE_RACK[INFECTION_RATE]);
 		let infectedCity = INFECTION_DECK.pop();
+
+		let quarantineSpecialist = Object.values(players).find(player=>player.role.name==="Quarantine Specialist");
+		let quarantineSpecialistEffect = [];
+		if (typeof quarantineSpecialist !== 'undefined') {
+			let quarantineCity = qurantineSpecialist.location;
+			quarantineSpecialistEffect.push(quarantineCity);
+			cities.find(city=>city.name===quarantineCity).neighbors.forEach(neighbor=>quarantineSpecialistEffect.push(neighbor));
+		}
 		if (!DISEASES[infectedCity.color].cured) {
-			let city = cities.find(city => city.name === infectedCity.name);
-			if (city.diseaseCounts[city.color] > 0) { // Outbreak occured
-				outbreak(city, city.color, [city.name]);
+			if (!quarantineSpecialistEffect.includes(infectedCity.name)){
+				let city = cities.find(city => city.name === infectedCity.name);
+				if (city.diseaseCounts[city.color] > 0) { // Outbreak occured
+					outbreak(city, city.color, [city.name]);
+				}
+				city.diseaseCounts[city.color] = 3;
+				checkMaxDiseaseCount();
 			}
-			city.diseaseCounts[city.color] = 3;
-			checkMaxDiseaseCount();
 			
 			INFECTION_DISCARD_PILE.push(infectedCity);
 			shuffle(INFECTION_DISCARD_PILE);
@@ -1031,7 +1243,7 @@ function checkMaxDiseaseCount() {
 			.map(city => city.diseaseCounts[color])
 			.reduce((a, b) => a + b, 0);
 		if (sumColor > MAX_DISEASE_COUNT) {
-			io.sockets.emit('game over', 'Max disease count reached.');
+			gameOver('Worldwide infections spread past the point of no return. Resources previously used to fight it have been focused elsewhere.');
 		}
 	});
 
@@ -1042,7 +1254,7 @@ function outbreak(city, color, citiesAlreadyInfected){
 	OUTBREAKS++;
 	io.sockets.emit('outbreaks', OUTBREAKS);
 	if (OUTBREAKS > MAX_OUTBREAKS) {
-		io.sockets.emit('game over', '8 outbreaks have occured.')
+		gameOver('Panic sets in worldwide has more than 8 outbreaks have been reported. International cooperation has ceased has governments struggle to contain massive riots.');
 	}
 
 	city.neighbors.forEach(neighborName => {
@@ -1074,6 +1286,13 @@ function drawCard(player) {
 	info(`${player.name} drew the card ${player.cards[player.cards.length - 1].name}`)
 }
 
+function gameOver(message) {
+	clearInterval(tickInterval);
+	io.sockets.emit('game over', {
+		message: message
+	});
+}
+
 io.on('connection', function(socket) {
 	socket.on('new player', (name) => newPlayer(name, socket));
 	
@@ -1083,21 +1302,36 @@ io.on('connection', function(socket) {
 		let allReadyToStart = Object.values(players)
 			.map(player => player.readyToStart)
 			.every(ready=>ready === true);
-		if (allReadyToStart) {
+		if (allReadyToStart && Object.values(players).length >= 2) {
 			startGame(socket);
 		}
 	});
 
 	socket.on('action', action => executeAction(socket, action));
 	socket.on('event card played', data => executeEventCard(socket, data));
+
 	socket.on('give card', data => {
 		Object.values(players).find(player=>player.name === data.player).cards.push(data.card);
 	});
 
+
+	socket.on('give contingency card', data => {
+		Object.values(players).find(player=>player.name === data.player).contingencyCard = data.card;
+	});
+
+	socket.on('set role', data => {
+		Object.values(players).find(player=>player.name === data.player).role.name = data.role;
+	});
+	socket.on('set disease', data => {
+		DISEASES[data.color].cured = data.cured;
+		io.sockets.emit('diseases', DISEASES);
+	});
+
 	socket.on('force discard card complete', function(discardedCard) {
-		players[socket.id].cards.splice(
+		PLAYER_DISCARD_PILE.push(players[socket.id].cards.splice(
 			players[socket.id].cards.findIndex(pCard => pCard.name === discardedCard),
-			1);
+			1));
+		io.sockets.emit('player discard pile', PLAYER_DISCARD_PILE);
 		GAME_PAUSED = false;
 		PLAYER_DISCARDING = false;
 		io.sockets.emit('unpause');
@@ -1110,11 +1344,4 @@ io.on('connection', function(socket) {
 	socket.on('request forecast data', function(fn) {
 		fn(INFECTION_DECK.slice(0,6));
 	});
-
-})
-
-setInterval(function() {
-	io.sockets.emit('players', players);
-	io.sockets.emit('cities', cities);
-}, 1000 / 5);
-
+});

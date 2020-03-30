@@ -26,6 +26,11 @@ You should also be able to connect through hamachi or some other LAN simulator.
 ## Rules
 At least 2 players and not more than 4 need to click ready for the game to start.
 
+### Setup
+Before the first turn, 3 cities will be infected with 1 infection, 
+3 with 2 infections, and 3 with 3 infections and all players will be given some cards.
+With 2 players each gets 4 cards, with 3, 3 cards and with 4 2 cards. 
+
 ### Action Points
 All players start with 4 action points. These can be used to move around the board,
 build research stations, discover cures, and treat diseases.
@@ -136,4 +141,10 @@ once during a chain of outbreaks.
 
 If 8 outbreaks occur you have lost the game. 
 
+#### Quarantine specialist
+Prevents outbreaks and infection in their location and all connected cities. Does not affect initial placement of infections.
+
+
+### Contingency Planner
+Can take any event card from the discard pile and place in their hand, using an action point. Ignores max hand limit.
 

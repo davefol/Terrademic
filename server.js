@@ -782,8 +782,7 @@ function executeEventCard(socket, data) {
 				info('You do not have the Forecast card.', socket)
 			}
 			break;
-		case 'Goveplayers[socket.id].cards.splice(cardIndex,1);rnment Grant':
-			//TODO: Government Grant
+		case 'Government Grant':
 			if (cities.find(city=>city.name===data.target).researchStationState === 'built') {
 				info(`${data.city} already has a research station in it.`, socket);
 			} 
@@ -807,7 +806,6 @@ function executeEventCard(socket, data) {
 			
 			break;
 		case 'Resilient Population':
-			//TODO: Resilient Population
 			if (hasPopulation || hasPopulationCont) {
 				INFECTION_DISCARD_PILE.splice(INFECTION_DISCARD_PILE.findIndex(card=>card.name===data.card), 1);
 				info(`${players[socket.id].name} removed the infection card ${data.card} from the game.`);
@@ -882,6 +880,7 @@ function executeAction(socket, action) {
 				} else {
 					players[socket.id].location = action.city;
 					medicLocationCheck(players[socket.id]);
+					players[socket.id].cards.splice(players[socket.id].cards.findIndex(card=>card.name===players[socket.id].location),1);
 					players[socket.id].actionPoints--;
 					info(`${players[socket.id].name} chartered a flight to ${action.location}`);
 				}
@@ -1045,9 +1044,17 @@ function executeAction(socket, action) {
 						players[socket.id].cards.splice(cardIndex, 1);
 					}
 					DISEASES[action.color].cured = true;
+					let medic = Object.values(players).find(player=>player.role.name==="Medic");
+					if (typeof medic !== 'undefined') {
+						medicLocationCheck(medic);
+					}
 					players[socket.id].actionPoints--;
 					io.sockets.emit('diseases', DISEASES);
 					info(`${players[socket.id].name} discovered a cure for the ${action.color} disease.`);
+
+					if (Object.values(DISEASES).filter(disease=>disease.cured===true).length===4) {
+						gameOver("You have discovered cures for all 4 diseases. The world showers you with praise. You will go down in history as the heros that saved earth from the TERRADEMIC.");
+					}
 				}
 				break;
 
